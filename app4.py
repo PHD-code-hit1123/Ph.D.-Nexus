@@ -33,32 +33,27 @@ def init_cloudinary():
 
 
 def upload_to_cloud(uploaded_file):
-    """上传函数终极修复版：强制指针归零 + 强制 RAW 模式"""
+    """上传函数 (防缓存版)：自动重命名 + 强制 RAW 模式"""
     init_cloudinary()
     try:
-        # === 核心修复 1: 必须把指针拨回开头！===
-        # 否则上传的就是 0KB 的空文件，导致浏览器“未能加载 PDF”
-        uploaded_file.seek(0)
-        
-        # === 核心修复 2: PDF 必须走 raw 模式 ===
-        # 否则 Cloudinary 会把它当图片处理，导致 HTTP 401 错误
+        # 1. 强制 PDF 走 raw 模式 (避开 401 权限问题)
         res_type = "auto"
+        # 检查文件名后缀
         if uploaded_file.name.lower().endswith(('.pdf', '.zip', '.docx', '.py', '.txt')):
-            res_type = "raw"  # 强制 PDF 走 raw 通道
+            res_type = "raw"
 
-        # 开始上传
+        # 2. 上传
         response = cloudinary.uploader.upload(
-            uploaded_file, 
-            resource_type=res_type,
-            use_filename=True,
-            unique_filename=False
+            uploaded_file.getvalue(), # 直接传字节数据，防止指针问题
+            resource_type=res_type,   # 指定模式
+            use_filename=True,        # 使用原文件名作为基础
+            unique_filename=True      # <--- 关键！自动添加随机后缀，避开缓存！
         )
         return response['secure_url']
         
     except Exception as e:
         st.error(f"☁️ 上传服务报错: {e}")
         return None
-
 
 # --- 3. 数据库连接 (Google Sheets) ---
 def get_connection():
@@ -274,5 +269,6 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
