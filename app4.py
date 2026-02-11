@@ -74,6 +74,23 @@ def get_data(worksheet_name):
     except:
         return pd.DataFrame()
 
+# --- 新增：管理员删除与编辑功能 ---
+def delete_post(index):
+    """删除指定索引的帖子"""
+    conn = get_connection()
+    df = get_data("posts")
+    # 也就是删除 DataFrame 里对应的这一行
+    df = df.drop(index)
+    conn.update(worksheet="posts", data=df)
+
+def edit_post_content(index, new_content):
+    """更新指定索引的帖子内容"""
+    conn = get_connection()
+    df = get_data("posts")
+    # 修改指定单元格
+    df.at[index, "content"] = new_content
+    conn.update(worksheet="posts", data=df)
+
 
 def save_post_final(username, content, category, uploaded_file):
     conn = get_connection()
@@ -203,19 +220,23 @@ def main():
                                 st.rerun()
 
         # 左侧展示栏
+        # 左侧展示栏 (修改版)
         with c1:
             st.markdown("### 📚 最新文献 (Latest Papers)")
             df = get_data("posts")
             if not df.empty:
-                df = df.sort_index(ascending=False)
-                for i, row in df.iterrows():
-                    # 生成下载按钮 HTML
+                # 按索引倒序，保证新发的在上面，同时保留原始索引 i 用于删除
+                df_sorted = df.sort_index(ascending=False)
+                
+                for i, row in df_sorted.iterrows():
+                    # --- 1. 常规显示逻辑 ---
                     dl_html = ""
                     if row['file_link']:
+                        # 判断是 Drive 还是 Base64 还是 Cloudinary
                         dl_html = f'<a href="{row["file_link"]}" target="_blank" class="download-btn">📥 Download: {row["filename"]}</a>'
-
+                    
                     avatar = f"https://api.dicebear.com/9.x/initials/svg?seed={row['avatar_seed']}"
-
+                    
                     col_icon, col_content = st.columns([1, 8])
                     with col_icon:
                         st.image(avatar, width=50)
@@ -223,18 +244,47 @@ def main():
                         st.markdown(f"""
                         <div class="card">
                             <div style="color: #64748b; font-size: 0.8em; margin-bottom: 8px;">
-                                {row['time']} • <span style="background:#e0f2fe; color:#0369a1; padding:2px 8px; border-radius:10px;">{row['category']}</span>
+                                <span style="color:#94a3b8">#{i}</span> {row['time']} • <span style="background:#e0f2fe; color:#0369a1; padding:2px 8px; border-radius:10px;">{row['category']}</span>
                             </div>
                             <h3 style="margin: 0 0 10px 0; color: #0f172a;">{row['username']}</h3>
                             <p style="color: #334155; line-height: 1.6;">{row['content']}</p>
                             {dl_html}
                         </div>
                         """, unsafe_allow_html=True)
+                        
+                        # 常规用户点赞
+                        c_like, c_admin = st.columns([2, 8])
+                        with c_like:
+                            if st.button(f"👍 ({row['likes']})", key=f"btn_{i}"):
+                                update_likes(i, row['likes'])
+                                st.rerun()
 
-                        # 简单的点赞
-                        if st.button(f"👍 Agre ({row['likes']})", key=f"btn_{i}"):
-                            update_likes(i, row['likes'])
-                            st.rerun()
+                        # --- 2. 管理员专属操作区 (核心升级) ---
+                        # 只有登录后才会看到这个红色区域
+                        if st.session_state.is_admin:
+                            with st.expander(f"🔴 管理员操作 (操作对象: #{i})"):
+                                st.warning("⚠️ 警告：修改直接同步至数据库，不可撤销。")
+                                
+                                # 编辑功能
+                                new_text = st.text_area("修正内容", value=row['content'], key=f"edit_area_{i}")
+                                if st.button("💾 保存修改", key=f"save_{i}"):
+                                    edit_post_content(i, new_text)
+                                    st.success("已更新！")
+                                    time.sleep(1)
+                                    st.rerun()
+                                
+                                st.markdown("---")
+                                
+                                # 删除功能
+                                col_del1, col_del2 = st.columns([1, 1])
+                                with col_del1:
+                                    st.markdown("**危险区域:**")
+                                with col_del2:
+                                    if st.button("🗑️ 永久删除此贴", key=f"del_{i}", type="primary"):
+                                        delete_post(i)
+                                        st.error("帖子已从数据库移除。")
+                                        time.sleep(1)
+                                        st.rerun()
 
     # --- Tab 2: 洞察 ---
     with tab2:
@@ -269,6 +319,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
