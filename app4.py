@@ -33,23 +33,20 @@ def init_cloudinary():
 
 
 def upload_to_cloud(uploaded_file):
-    """上传任意文件到 Cloudinary并返回链接 (修复版)"""
+    """上传函数终极修复版：强制指针归零 + 强制 RAW 模式"""
     init_cloudinary()
     try:
-        # === 关键修复 1: 指针归零 ===
-        # 防止之前读取过文件导致上传 0KB
+        # === 核心修复 1: 必须把指针拨回开头！===
+        # 否则上传的就是 0KB 的空文件，导致浏览器“未能加载 PDF”
         uploaded_file.seek(0)
         
-        # === 关键修复 2: 智能类型判断 ===
-        # 默认使用 'auto' (这样 PDF 会被当做文档处理，支持预览)
-        # 只有纯代码、压缩包等才强制用 'raw'
+        # === 核心修复 2: PDF 必须走 raw 模式 ===
+        # 否则 Cloudinary 会把它当图片处理，导致 HTTP 401 错误
         res_type = "auto"
-        
-        # 如果是这些无法预览的文件，强制使用 raw，否则 Cloudinary 会报错
-        if uploaded_file.name.lower().endswith(('.zip', '.rar', '.py', '.txt', '.csv', '.ipynb')):
-            res_type = "raw" 
+        if uploaded_file.name.lower().endswith(('.pdf', '.zip', '.docx', '.py', '.txt')):
+            res_type = "raw"  # 强制 PDF 走 raw 通道
 
-        # 上传
+        # 开始上传
         response = cloudinary.uploader.upload(
             uploaded_file, 
             resource_type=res_type,
@@ -277,4 +274,5 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
