@@ -33,26 +33,31 @@ def init_cloudinary():
 
 
 def upload_to_cloud(uploaded_file):
-    """上传任意文件到 Cloudinary并返回链接"""
+    """上传任意文件到 Cloudinary并返回链接 (修复版)"""
     init_cloudinary()
     try:
-        # 1. 读取文件二进制数据 (防止读取为空)
-        file_bytes = uploaded_file.getvalue()
+        # === 关键修复 1: 指针归零 ===
+        # 防止之前读取过文件导致上传 0KB
+        uploaded_file.seek(0)
         
-        # 2. 智能判断类型
-        # 注意：把 .pdf 从这里去掉了！让 PDF 走 "auto" 模式
-        # 这样 Cloudinary 会把它当做文档处理，浏览器就能预览了
+        # === 关键修复 2: 智能类型判断 ===
+        # 默认使用 'auto' (这样 PDF 会被当做文档处理，支持预览)
+        # 只有纯代码、压缩包等才强制用 'raw'
         res_type = "auto"
-        if uploaded_file.name.lower().endswith(('.zip', '.docx', '.py', '.txt', '.csv')):
+        
+        # 如果是这些无法预览的文件，强制使用 raw，否则 Cloudinary 会报错
+        if uploaded_file.name.lower().endswith(('.zip', '.rar', '.py', '.txt', '.csv', '.ipynb')):
             res_type = "raw" 
 
+        # 上传
         response = cloudinary.uploader.upload(
-            file_bytes,  # 传字节流，更稳
+            uploaded_file, 
             resource_type=res_type,
             use_filename=True,
             unique_filename=False
         )
         return response['secure_url']
+        
     except Exception as e:
         st.error(f"☁️ 上传服务报错: {e}")
         return None
@@ -272,3 +277,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+
