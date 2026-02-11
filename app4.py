@@ -103,17 +103,27 @@ def update_likes(index, current_likes):
     df.at[index, "likes"] = int(current_likes) + 1
     conn.update(worksheet="posts", data=df)
 
-# --- 新增：管理员删除与编辑 ---
+# --- 管理员核心功能区 ---
 def delete_post(index):
+    """删除帖子"""
     conn = get_connection()
     df = get_data("posts")
     df = df.drop(index)
     conn.update(worksheet="posts", data=df)
 
-def edit_post_content(index, new_content):
+def update_post_full(index, new_content, new_filename=None, new_file_link=None):
+    """同时更新内容和文件"""
     conn = get_connection()
     df = get_data("posts")
+    
+    # 1. 更新文字
     df.at[index, "content"] = new_content
+    
+    # 2. 如果传了新文件，更新文件信息
+    if new_file_link and new_filename:
+        df.at[index, "filename"] = new_filename
+        df.at[index, "file_link"] = new_file_link
+        
     conn.update(worksheet="posts", data=df)
 
 def get_config(key, default):
@@ -157,7 +167,6 @@ def apply_style():
     """, unsafe_allow_html=True)
 
 def main():
-    # --- 关键修复：必须在一切开始前初始化 session_state ---
     if "is_admin" not in st.session_state:
         st.session_state.is_admin = False
 
@@ -233,13 +242,31 @@ def main():
                                 update_likes(i, row['likes'])
                                 st.rerun()
 
-                        # 管理员操作面板
+                        # --- 管理员操作面板 (升级版) ---
                         if st.session_state.is_admin:
                             with st.expander(f"🔴 管理员操作 (#{i})"):
-                                new_text = st.text_area("修正内容", value=row['content'], key=f"edit_{i}")
-                                if st.button("💾 保存修改", key=f"save_{i}"):
-                                    edit_post_content(i, new_text)
-                                    st.success("已更新！")
+                                st.caption("提示：如果不上传新文件，则原文件保持不变。")
+                                
+                                # 1. 编辑文字
+                                new_text = st.text_area("修正内容", value=row['content'], key=f"edit_text_{i}")
+                                
+                                # 2. 编辑文件 (新增)
+                                new_file = st.file_uploader("更换附件 (可选)", type=['pdf', 'zip', 'py', 'docx', 'png'], key=f"edit_file_{i}")
+                                
+                                # 保存按钮
+                                if st.button("💾 保存所有修改", key=f"save_{i}"):
+                                    final_link = None
+                                    final_name = None
+                                    
+                                    # 如果管理员传了新文件，就上传
+                                    if new_file:
+                                        with st.spinner("正在替换旧文件..."):
+                                            final_link = upload_to_cloud(new_file)
+                                            final_name = new_file.name
+                                    
+                                    # 更新数据库
+                                    update_post_full(i, new_text, final_name, final_link)
+                                    st.success("帖子内容与文件已更新！")
                                     time.sleep(1)
                                     st.rerun()
                                 
