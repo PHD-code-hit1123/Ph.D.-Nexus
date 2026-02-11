@@ -36,14 +36,18 @@ def upload_to_cloud(uploaded_file):
     """上传任意文件到 Cloudinary并返回链接"""
     init_cloudinary()
     try:
-        # resource_type="auto" 让它自动识别是图片还是 PDF/ZIP
-        # raw 对于非图片文件（如 PDF, py）很重要
+        # 1. 读取文件二进制数据 (防止读取为空)
+        file_bytes = uploaded_file.getvalue()
+        
+        # 2. 智能判断类型
+        # 注意：把 .pdf 从这里去掉了！让 PDF 走 "auto" 模式
+        # 这样 Cloudinary 会把它当做文档处理，浏览器就能预览了
         res_type = "auto"
-        if uploaded_file.name.endswith(('.pdf', '.zip', '.docx', '.py', '.txt')):
-            res_type = "raw"
+        if uploaded_file.name.lower().endswith(('.zip', '.docx', '.py', '.txt', '.csv')):
+            res_type = "raw" 
 
         response = cloudinary.uploader.upload(
-            uploaded_file,
+            file_bytes,  # 传字节流，更稳
             resource_type=res_type,
             use_filename=True,
             unique_filename=False
@@ -266,4 +270,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
